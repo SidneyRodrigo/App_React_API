@@ -1,73 +1,55 @@
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, View, Text } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
-import * as Location from 'expo-location';
+import React, {useEffect, useState, useRef} from 'react';
+import {View} from 'react-native';
+import {styles} from './styles.js';
+import {requestForegroundPermissionsAsync, getCurrentPositionAsync, LocationObject, watchPositionAsync, LocationAccuracy} from 'expo-location';
+import MapView, {Marker} from 'react-native-maps';
 
-export default function App() {
+export default function App() 
+{
   const [location, setLocation] = useState(null);
 
-  useEffect(() => {
-    const requestLocationPermission = async () => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        
-        if (status !== 'granted') {
-          console.log("Permissão de localização não concedida.");
-          return;
-        }
+  const mapRef = useRef(null);
 
-        const location = await Location.getCurrentPositionAsync({});
-        const { latitude, longitude } = location.coords;
+  async function requestLocationPermission()
+  {
+    const { granted } = await requestForegroundPermissionsAsync();
 
-        fetch(`http://192.168.1.67:3001/api/localizacao?latitude=${latitude}&longitude=${longitude}`)
-          .then(response => response.json())
-          .then(data => {
-            console.log("Dados da API:", data);
-            setLocation({ latitude: data.latitude, longitude: data.longitude });
-          })
-          .catch(error => {
-            console.error("Erro ao chamar a API:", error);
-          });
-      } catch (error) {
-        console.error("Erro ao obter a localização:", error);
-      }
-    };
+    if(granted)
+    {
+      const currentPosition = await getCurrentPositionAsync();
+      setLocation(currentPosition);
+    }
+  }
 
+  useEffect(() => 
+  {
     requestLocationPermission();
+    watchPositionAsync(
+      {
+        accuracy: LocationAccuracy.Highest,
+        timeInterval: 1000,
+        distanceInterval: 1,
+      }, 
+      (response) => 
+      {
+        setLocation(response);
+        mapRef.current?.animateCamera(
+          {
+            center: response.coords,
+            latitudeDelta: 0.005,
+            longitudeDelta: 0.005,
+          });
+      });
   }, []);
 
   return (
-    <View style={styles.container}>
-      {location ? (
-        <MapView
-          style={styles.map}
-          initialRegion={{
-            latitude: location.latitude,
-            longitude: location.longitude,
-            latitudeDelta: 0.0922,
-            longitudeDelta: 0.0421,
-          }}
-        >
-          <Marker
-            coordinate={{ latitude: location.latitude, longitude: location.longitude }}
-            title="Minha Localização"
-          />
+    <View style = {styles.container}>
+      {
+        location &&
+        <MapView ref = {mapRef} style = {styles.map} initialRegion = {{latitude: location.coords.latitude, longitude: location.coords.longitude, latitudeDelta: 0.005, longitudeDelta: 0.005}}>
+          <Marker coordinate = {{latitude: location.coords.latitude, longitude: location.coords.longitude}}></Marker>
         </MapView>
-      ) : (
-        <Text>Obtendo localização...</Text>
-      )}
+      }      
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  map: {
-    flex: 1,
-    width: '100%',
-  },
-});
